@@ -1,0 +1,350 @@
+// PixelClient 2.1.4 Clone for EaglerForge (1.8.8 / 1.12.2 Compatible)
+// Author: scammmmmmmmer (chatgpt)
+
+
+(function () {
+  const STORAGE_KEY = "pixelCloneSettings_v2";
+  const HUD_POS_KEY = "pixelCloneHudPositions_v2";
+
+  // Load settings and positions or use defaults
+  let SETTINGS = JSON.parse(localStorage.getItem(STORAGE_KEY)) || {};
+  let HUD_POSITIONS = JSON.parse(localStorage.getItem(HUD_POS_KEY)) || {};
+
+  // Utility save functions
+  function saveSettings() {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(SETTINGS));
+  }
+  function savePositions() {
+    localStorage.setItem(HUD_POS_KEY, JSON.stringify(HUD_POSITIONS));
+  }
+
+  // Create a toggle element with label, state icons, and tooltip
+  function createToggle(id, label, defaultState = false, tooltip = "") {
+    if (!(id in SETTINGS)) SETTINGS[id] = defaultState;
+
+    const container = document.createElement("div");
+    container.className = "mod-toggle";
+    container.title = tooltip;
+
+    const labelEl = document.createElement("label");
+    labelEl.textContent = label;
+
+    const stateIcon = document.createElement("span");
+    stateIcon.style.marginLeft = "8px";
+    stateIcon.style.fontWeight = "bold";
+    stateIcon.style.color = SETTINGS[id] ? "#60b3bd" : "#d25c5c"; // teal or red
+    stateIcon.textContent = SETTINGS[id] ? "✔" : "✘";
+
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.checked = SETTINGS[id];
+
+    checkbox.onchange = (e) => {
+      SETTINGS[id] = e.target.checked;
+      stateIcon.textContent = SETTINGS[id] ? "✔" : "✘";
+      stateIcon.style.color = SETTINGS[id] ? "#60b3bd" : "#d25c5c";
+      saveSettings();
+      applyFeature(id, SETTINGS[id]);
+    };
+
+    container.appendChild(labelEl);
+    container.appendChild(checkbox);
+    container.appendChild(stateIcon);
+    return container;
+  }
+
+  // Style for menu and HUD
+  const style = document.createElement("style");
+  style.textContent = `
+    @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap');
+    #pixelCloneMenu {
+      font-family: 'Roboto', sans-serif;
+      position: fixed;
+      top: 100px;
+      right: 50px;
+      background: linear-gradient(135deg, rgba(96,179,189,0.9), rgba(134,217,214,0.9));
+      color: #fff;
+      border-radius: 12px;
+      box-shadow: 0 0 20px rgba(96, 179, 189, 0.5);
+      padding: 16px;
+      z-index: 9999;
+      display: none;
+      max-height: 80vh;
+      overflow-y: auto;
+      width: 300px;
+      animation: fadeIn 0.5s ease-in-out;
+      backdrop-filter: blur(6px);
+      cursor: move;
+      user-select: none;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: scale(0.95); }
+      to { opacity: 1; transform: scale(1); }
+    }
+    .mod-toggle {
+      margin-bottom: 10px;
+      padding: 8px;
+      background: rgba(44,44,44,0.8);
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-weight: 500;
+      font-size: 14px;
+    }
+    .mod-toggle label {
+      flex-grow: 1;
+      user-select: none;
+    }
+    .mod-toggle input[type='checkbox'] {
+      transform: scale(1.2);
+      margin-left: 10px;
+      cursor: pointer;
+    }
+    .hud-module {
+      position: fixed;
+      padding: 6px 10px;
+      background: rgba(0,0,0,0.6);
+      color: white;
+      border-radius: 6px;
+      font-family: Roboto, sans-serif;
+      cursor: move;
+      user-select: none;
+      z-index: 9998;
+      font-weight: 600;
+      font-size: 14px;
+      white-space: nowrap;
+      transition: background-color 0.3s ease;
+    }
+    .hud-module:hover {
+      background-color: rgba(96,179,189,0.8);
+    }
+  `;
+  document.head.appendChild(style);
+
+  // Create draggable menu with ARGB animated background
+  const menu = document.createElement("div");
+  menu.id = "pixelCloneMenu";
+
+  // ARGB animated background function
+  function animateMenuBackground() {
+    let hue = 0;
+    function frame() {
+      hue = (hue + 1) % 360;
+      menu.style.background = `linear-gradient(135deg, hsl(${hue}, 70%, 50%, 0.9), hsl(${(hue + 60) % 360}, 70%, 50%, 0.9))`;
+      requestAnimationFrame(frame);
+    }
+    frame();
+  }
+  animateMenuBackground();
+
+  // Make menu draggable
+  let isDragging = false,
+    offsetX = 0,
+    offsetY = 0;
+  menu.addEventListener("mousedown", (e) => {
+    if (e.target !== menu) return;
+    isDragging = true;
+    offsetX = e.clientX - menu.offsetLeft;
+    offsetY = e.clientY - menu.offsetTop;
+  });
+  window.addEventListener("mouseup", () => (isDragging = false));
+  window.addEventListener("mousemove", (e) => {
+    if (isDragging) {
+      menu.style.left = `${e.clientX - offsetX}px`;
+      menu.style.top = `${e.clientY - offsetY}px`;
+    }
+  });
+
+  // Add toggles with tooltips
+  menu.appendChild(createToggle("armorStatus", "Armor Status", false, "Show stats about your armor"));
+  menu.appendChild(createToggle("blockOverlay", "Block Overlay", false, "Show transparent block coloring overlay (like Badlion)"));
+  menu.appendChild(createToggle("brightness", "Fullbright", false, "Light up the world"));
+  menu.appendChild(createToggle("cps", "CPS Counter", false, "Show clicks per second"));
+  menu.appendChild(createToggle("fps", "FPS Counter", false, "Show FPS in game"));
+  menu.appendChild(createToggle("keystrokes", "Keystrokes", false, "Show your key inputs"));
+  menu.appendChild(createToggle("toggleSprint", "Toggle Sprint", false, "Toggle sprint on/off"));
+  menu.appendChild(createToggle("timeChanger", "Time Changer", false, "Change world time"));
+  menu.appendChild(createToggle("noDynamicFOV", "No Dynamic FOV", false, "Prevent FOV changes"));
+  menu.appendChild(createToggle("ping", "Ping Display", false, "Show ping"));
+  menu.appendChild(createToggle("freeLook", "Free Look", false, "Look around your player freely"));
+  menu.appendChild(createToggle("hurtColor", "Hurt Color", false, "Modify damage tint"));
+
+  document.body.appendChild(menu);
+
+  // Toggle menu on Right Shift
+  let menuVisible = false;
+  window.addEventListener("keydown", (e) => {
+    if (e.code === "ShiftRight" && !e.repeat) {
+      menuVisible = !menuVisible;
+      menu.style.display = menuVisible ? "block" : "none";
+    }
+  });
+
+  // HUD modules container
+  const hudModules = {};
+
+  // Create movable HUD module
+  function createHudModule(id, text, defaultX = 100, defaultY = 100) {
+    const el = document.createElement("div");
+    el.className = "hud-module";
+    el.id = `hud-${id}`;
+    el.textContent = text;
+
+    // Load saved position or use default
+    const pos = HUD_POSITIONS[id] || { x: defaultX, y: defaultY };
+    el.style.left = pos.x + "px";
+    el.style.top = pos.y + "px";
+
+    let dragging = false,
+      dragX = 0,
+      dragY = 0;
+
+    el.addEventListener("mousedown", (e) => {
+      dragging = true;
+      dragX = e.clientX - el.offsetLeft;
+      dragY = e.clientY - el.offsetTop;
+      el.style.transition = "none";
+      e.preventDefault();
+    });
+
+    window.addEventListener("mouseup", () => {
+      if (dragging) {
+        dragging = false;
+        saveModulePosition(id, el.offsetLeft, el.offsetTop);
+        el.style.transition = "background-color 0.3s ease";
+      }
+    });
+
+    window.addEventListener("mousemove", (e) => {
+      if (dragging) {
+        el.style.left = e.clientX - dragX + "px";
+        el.style.top = e.clientY - dragY + "px";
+      }
+    });
+
+    document.body.appendChild(el);
+    hudModules[id] = el;
+  }
+
+  // Save HUD module position
+  function saveModulePosition(id, x, y) {
+    HUD_POSITIONS[id] = { x, y };
+    savePositions();
+  }
+
+  // Feature implementations:
+
+  // Fullbright (brightness filter on canvas)
+  let fullbrightStyleEl = null;
+  function applyFullbright(enabled) {
+    if (enabled) {
+      if (!fullbrightStyleEl) {
+        fullbrightStyleEl = document.createElement("style");
+        fullbrightStyleEl.id = "fullbrightStyle";
+        fullbrightStyleEl.innerText = `canvas { filter: brightness(1.5) !important; }`;
+        document.head.appendChild(fullbrightStyleEl);
+      }
+    } else if (fullbrightStyleEl) {
+      fullbrightStyleEl.remove();
+      fullbrightStyleEl = null;
+    }
+  }
+
+  // Transparent Block Overlay (Badlion style)
+  let blockOverlayActive = false;
+  let blockOverlayCtx = null;
+  function applyBlockOverlay(enabled) {
+    if (enabled && !blockOverlayActive) {
+      const canvas = document.querySelector("canvas");
+      if (!canvas) return;
+
+      blockOverlayActive = true;
+      blockOverlayCtx = canvas.getContext("2d");
+
+      function drawOverlay() {
+        if (!blockOverlayActive) return;
+        blockOverlayCtx.fillStyle = "rgba(255, 255, 255, 0.1)";
+        blockOverlayCtx.fillRect(0, 0, canvas.width, canvas.height);
+        requestAnimationFrame(drawOverlay);
+      }
+      drawOverlay();
+    } else {
+      blockOverlayActive = false;
+    }
+  }
+
+  // Dummy variables to simulate dynamic data
+  let cpsCount = 0;
+  let fpsCount = 60;
+  let pingValue = 0;
+
+  // Simulate FPS counter update
+  function updateFPS() {
+    fpsCount = Math.floor(55 + 10 * Math.random());
+    if (hudModules.fps) hudModules.fps.textContent = `FPS: ${fpsCount}`;
+    setTimeout(updateFPS, 1000);
+  }
+
+  // Simulate CPS counter update
+  function updateCPS() {
+    cpsCount = Math.floor(0 + 10 * Math.random());
+    if (hudModules.cps) hudModules.cps.textContent = `CPS: ${cpsCount}`;
+    setTimeout(updateCPS, 500);
+  }
+
+  // Simulate Ping update
+  function updatePing() {
+    pingValue = Math.floor(30 + 100 * Math.random());
+    if (hudModules.ping) hudModules.ping.textContent = `Ping: ${pingValue} ms`;
+    setTimeout(updatePing, 1500);
+  }
+
+  // Apply feature toggles dynamically
+  function applyFeature(id, enabled) {
+    switch (id) {
+      case "brightness":
+        applyFullbright(enabled);
+        break;
+      case "blockOverlay":
+        applyBlockOverlay(enabled);
+        break;
+      case "keystrokes":
+        if (enabled && !hudModules.keystrokes) createHudModule("keystrokes", "W A S D", 100, 100);
+        else if (!enabled && hudModules.keystrokes) hudModules.keystrokes.remove(), delete hudModules.keystrokes;
+        break;
+      case "cps":
+        if (enabled && !hudModules.cps) createHudModule("cps", "CPS: 0", 100, 150);
+        else if (!enabled && hudModules.cps) hudModules.cps.remove(), delete hudModules.cps;
+        break;
+      case "fps":
+        if (enabled && !hudModules.fps) createHudModule("fps", "FPS: 60", 100, 200), updateFPS();
+        else if (!enabled && hudModules.fps) hudModules.fps.remove(), delete hudModules.fps;
+        break;
+      case "ping":
+        if (enabled && !hudModules.ping) createHudModule("ping", "Ping: 0 ms", 100, 250), updatePing();
+        else if (!enabled && hudModules.ping) hudModules.ping.remove(), delete hudModules.ping;
+        break;
+      case "freeLook":
+        if (enabled && !hudModules.freeLook) createHudModule("freeLook", "Free Look Enabled", 100, 300);
+        else if (!enabled && hudModules.freeLook) hudModules.freeLook.remove(), delete hudModules.freeLook;
+        break;
+      case "hurtColor":
+        if (enabled && !hudModules.hurtColor) createHudModule("hurtColor", "Hurt Color Enabled", 100, 350);
+        else if (!enabled && hudModules.hurtColor) hudModules.hurtColor.remove(), delete hudModules.hurtColor;
+        break;
+      // Add more features if needed here
+    }
+  }
+
+  // Initialize features on load
+  for (const [id, enabled] of Object.entries(SETTINGS)) {
+    applyFeature(id, enabled);
+  }
+
+  // Save settings and positions before unload
+  window.addEventListener("beforeunload", () => {
+    saveSettings();
+    savePositions();
+  });
+})();
